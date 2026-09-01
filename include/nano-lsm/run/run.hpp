@@ -17,6 +17,7 @@
 #include <functional>
 
 #include <nano-lsm/options.hpp>
+#include <nano-lsm/run/comparator_concept.hpp>
 #include <nano-lsm/run/op_result.hpp>
 #include <nano-lsm/run/run_entry.hpp>
 
@@ -30,21 +31,19 @@ class FileRunStorage;
 
 /** @brief Read-only packed B+Tree run, implemented in later steps. */
 template <
-    typename KeyT,
-    typename PayloadAddrT,
-    typename KeyCodec,
-    typename PayloadAddressCodec,
-    typename Compare = std::less<KeyT>>
+    PhysicalKey KeyT,
+    typename PayloadRefT,
+    typename ComparatorT = std::less<KeyT>>
+requires KeyComparator<ComparatorT, KeyT>
 class ImmutableRun;
 
 /** @brief Unordered L0 run, implemented in later steps. */
 template <
-    typename KeyT,
-    typename PayloadAddrT,
-    typename KeyCodec,
-    typename PayloadAddressCodec,
-    typename StoragePolicy,
-    typename Compare = std::less<KeyT>>
+    PhysicalKey KeyT,
+    typename PayloadRefT,
+    typename StoragePolicyT,
+    typename ComparatorT = std::less<KeyT>>
+requires KeyComparator<ComparatorT, KeyT>
 class MutableRun;
 
 }  // namespace nano_lsm

@@ -15,8 +15,9 @@
 #pragma once
 
 #include <cstdint>
-#include <optional>
 #include <utility>
+
+#include <nano-lsm/run/key_concept.hpp>
 
 namespace nano_lsm {
 
@@ -30,51 +31,51 @@ enum class EntryKindT : std::uint8_t {
 };
 
 /**
- * @brief A versioned key and its separated value-payload address.
+ * @brief A versioned physical key and its separated value-payload reference.
  *
- * A value entry owns a payload address. A tombstone has no payload address and hides older value
- * entries with the same key.
- *
- * @tparam KeyT Key type compared by a Run's configured comparator.
- * @tparam PayloadAddrT Address type supplied by the value-storage layer.
+ * The key is stored inline without dynamic allocation. Storage implementations persist each field
+ * separately and never copy the native RunEntry struct, whose layout may contain padding.
  */
-template <typename KeyT, typename PayloadAddrT>
+template <PhysicalKey KeyT, typename PayloadRefT>
 struct RunEntry {
     /** @brief Creates an entry that refers to a value payload. */
-    [[nodiscard]] static auto put(
+    [[nodiscard]] static auto make(
         KeyT key,
-        PayloadAddrT payload_addr,
+        PayloadRefT payload_ref,
         VersionT version
     ) -> RunEntry {
         return RunEntry{
             .key = std::move(key),
             .version = version,
+            .payload_ref = std::move(payload_ref),
             .kind = EntryKindT::value,
-            .payload_addr = std::move(payload_addr),
         };
     }
 
     /** @brief Creates an entry that hides older values for the supplied key. */
-    [[nodiscard]] static auto tombstone(KeyT key, VersionT version) -> RunEntry {
+    [[nodiscard]] static auto tombstone(
+        KeyT key,
+        VersionT version
+    ) -> RunEntry {
         return RunEntry{
             .key = std::move(key),
             .version = version,
+            .payload_ref = PayloadRefT{},
             .kind = EntryKindT::tombstone,
-            .payload_addr = std::nullopt,
         };
     }
 
-    /** @brief Entry key. */
+    /** @brief Inline physical key representation supplied by the user. */
     KeyT key;
 
     /** @brief Globally unique version assigned by the owning LSM tree. */
     VersionT version;
 
+    /** @brief External value reference; meaningful only when @ref kind is EntryKindT::value. */
+    PayloadRefT payload_ref;
+
     /** @brief Whether this entry contains a payload address or represents a deletion. */
     EntryKindT kind;
-
-    /** @brief Value payload address; present exactly when @ref kind is EntryKindT::value. */
-    std::optional<PayloadAddrT> payload_addr;
 };
 
 }  // namespace nano_lsm

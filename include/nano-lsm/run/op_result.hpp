@@ -30,12 +30,8 @@ enum class LookupState : std::uint8_t {
     tombstone,
 };
 
-/**
- * @brief The newest entry visible to a point lookup at a requested version.
- *
- * @tparam PayloadAddrT Address type supplied by the value-storage layer.
- */
-template <typename PayloadAddrT>
+/** @brief The newest entry visible to a point lookup at a requested version. */
+template <typename PayloadRefT>
 struct LookupResult {
     /** @brief Creates a result for a key with no visible entry. */
     [[nodiscard]] static auto not_found() noexcept -> LookupResult {
@@ -44,13 +40,13 @@ struct LookupResult {
 
     /** @brief Creates a result that refers to a visible value payload. */
     [[nodiscard]] static auto value(
-        PayloadAddrT payload_addr,
+        PayloadRefT payload_ref,
         VersionT version
     ) -> LookupResult {
         return LookupResult{
             .state = LookupState::value,
             .version = version,
-            .payload_addr = std::move(payload_addr),
+            .payload_ref = std::move(payload_ref),
         };
     }
 
@@ -59,7 +55,7 @@ struct LookupResult {
         return LookupResult{
             .state = LookupState::tombstone,
             .version = version,
-            .payload_addr = std::nullopt,
+            .payload_ref = std::nullopt,
         };
     }
 
@@ -69,14 +65,14 @@ struct LookupResult {
     /** @brief Visible version; meaningful only when @ref state is not `not_found`. */
     VersionT version = 0;
 
-    /** @brief Payload address; present exactly when @ref state is `value`. */
-    std::optional<PayloadAddrT> payload_addr = std::nullopt;
+    /** @brief Payload reference; present exactly when @ref state is `value`. */
+    std::optional<PayloadRefT> payload_ref = std::nullopt;
 };
 
 /** @brief State returned after atomically appending one batch to a mutable run. */
 struct AppendResult {
     /** @brief Total number of entries after the append. */
-    std::size_t size_entries = 0;
+    std::size_t num_total_entries = 0;
 
     /** @brief Whether the mutable run reached its threshold and now requires sealing. */
     bool seal_required = false;
