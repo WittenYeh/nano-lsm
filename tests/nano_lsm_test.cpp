@@ -4,8 +4,8 @@
 #include <nano-lsm/nano_lsm.hpp>
 
 auto main() -> int {
-    static_assert(emds::io::IOBuffer::AlignBytes == 4096);
-    static_assert(!std::is_copy_constructible_v<emds::io::IOBuffer>);
+    static_assert(emds::io::DirectIOBuffer::AlignBytes == 4096);
+    static_assert(!std::is_copy_constructible_v<emds::io::DirectIOBuffer>);
 
     emds::common::require_argument(true, "satisfied requirement");
 
