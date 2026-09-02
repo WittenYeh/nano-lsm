@@ -17,7 +17,7 @@
 #include <cstdint>
 #include <utility>
 
-#include <nano-lsm/run/key_concept.hpp>
+#include <nano-lsm/run/run_entry/key_concept.hpp>
 
 namespace nano_lsm {
 
@@ -26,7 +26,7 @@ using VersionT = std::uint64_t;
 
 /** @brief Describes whether a run entry refers to a value or deletes an older value. */
 enum class EntryKindT : std::uint8_t {
-    value,
+    valid,
     tombstone,
 };
 
@@ -39,24 +39,17 @@ enum class EntryKindT : std::uint8_t {
 template <PhysicalKey KeyT, typename PayloadRefT>
 struct RunEntry {
     /** @brief Creates an entry that refers to a value payload. */
-    [[nodiscard]] static auto make(
-        KeyT key,
-        PayloadRefT payload_ref,
-        VersionT version
-    ) -> RunEntry {
+    [[nodiscard]] static auto make(KeyT key, PayloadRefT payload_ref, VersionT version) -> RunEntry {
         return RunEntry{
             .key = std::move(key),
             .version = version,
             .payload_ref = std::move(payload_ref),
-            .kind = EntryKindT::value,
+            .kind = EntryKindT::valid,
         };
     }
 
     /** @brief Creates an entry that hides older values for the supplied key. */
-    [[nodiscard]] static auto tombstone(
-        KeyT key,
-        VersionT version
-    ) -> RunEntry {
+    [[nodiscard]] static auto tombstone(KeyT key, VersionT version) -> RunEntry {
         return RunEntry{
             .key = std::move(key),
             .version = version,
@@ -71,7 +64,7 @@ struct RunEntry {
     /** @brief Globally unique version assigned by the owning LSM tree. */
     VersionT version;
 
-    /** @brief External value reference; meaningful only when @ref kind is EntryKindT::value. */
+    /** @brief External value reference; meaningful only when @ref kind is EntryKindT::valid. */
     PayloadRefT payload_ref;
 
     /** @brief Whether this entry contains a payload address or represents a deletion. */

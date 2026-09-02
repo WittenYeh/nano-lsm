@@ -1,0 +1,8 @@
+BasedOnStyle: LLVM
+ColumnLimit: 110
+IndentWidth: 4
+ContinuationIndentWidth: 4
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBraces: Attach
+SortIncludes: Never

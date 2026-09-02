@@ -16,7 +16,7 @@
 
 #include <concepts>
 
-#include <nano-lsm/run/key_concept.hpp>
+#include <nano-lsm/run/run_entry/key_concept.hpp>
 
 namespace nano_lsm {
 

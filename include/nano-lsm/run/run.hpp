@@ -17,9 +17,10 @@
 #include <functional>
 
 #include <nano-lsm/options.hpp>
-#include <nano-lsm/run/comparator_concept.hpp>
 #include <nano-lsm/run/op_result.hpp>
-#include <nano-lsm/run/run_entry.hpp>
+#include <nano-lsm/run/run_entry/comparator_concept.hpp>
+#include <nano-lsm/run/run_entry/entry_codec.hpp>
+#include <nano-lsm/run/run_entry/run_entry.hpp>
 
 namespace nano_lsm {
 

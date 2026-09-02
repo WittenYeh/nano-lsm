@@ -19,7 +19,7 @@
 #include <optional>
 #include <utility>
 
-#include <nano-lsm/run/run_entry.hpp>
+#include <nano-lsm/run/run_entry/run_entry.hpp>
 
 namespace nano_lsm {
 
@@ -39,10 +39,7 @@ struct LookupResult {
     }
 
     /** @brief Creates a result that refers to a visible value payload. */
-    [[nodiscard]] static auto value(
-        PayloadRefT payload_ref,
-        VersionT version
-    ) -> LookupResult {
+    [[nodiscard]] static auto value(PayloadRefT payload_ref, VersionT version) -> LookupResult {
         return LookupResult{
             .state = LookupState::value,
             .version = version,
