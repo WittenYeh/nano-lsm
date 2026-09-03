@@ -14,17 +14,13 @@
 
 #pragma once
 
-#include <concepts>
+#include <nano-lsm/run/mutable_run/mutable_run_backend.hpp>
 
-#include <nano-lsm/run/run_entry/key_concept.hpp>
+namespace nano_lsm::detail {
 
-namespace nano_lsm {
+/** @brief Storage-resident backend implemented in the external-storage step. */
+template <PhysicalKey KeyT, typename KeyComparatorT>
+requires KeyComparator<KeyComparatorT, KeyT>
+class MutableRunBackend<KeyT, Placement::StorageResident, KeyComparatorT>;
 
-/** @brief Comparator contract used to establish a strict weak ordering over physical keys. */
-template <typename ComparatorT, typename KeyT>
-concept KeyComparator =
-    PhysicalKey<KeyT> &&
-    std::copy_constructible<ComparatorT> &&
-    std::strict_weak_order<ComparatorT, const KeyT&, const KeyT&>;
-
-}  // namespace nano_lsm
+}  // namespace nano_lsm::detail

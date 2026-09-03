@@ -1,3 +1,6 @@
 [submodule "third-party/emds-toolkit"]
 	path = third-party/emds-toolkit
 	url = https://github.com/WittenYeh/emds-toolkit.git
+[submodule "third-party/abseil-cpp"]
+	path = third-party/abseil-cpp
+	url = https://github.com/abseil/abseil-cpp.git

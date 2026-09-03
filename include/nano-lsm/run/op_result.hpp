@@ -31,7 +31,6 @@ enum class LookupState : std::uint8_t {
 };
 
 /** @brief The newest entry visible to a point lookup at a requested version. */
-template <typename PayloadRefT>
 struct LookupResult {
     /** @brief Creates a result for a key with no visible entry. */
     [[nodiscard]] static auto not_found() noexcept -> LookupResult {

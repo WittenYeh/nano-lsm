@@ -29,28 +29,24 @@ namespace nano_lsm {
 namespace {
 
 using KeyT = std::uint8_t;
-using PayloadRefT = std::uint64_t;
-using EntryT = RunEntry<KeyT, PayloadRefT>;
-using CodecT = EntryCodec<KeyT, PayloadRefT>;
+using EntryT = RunEntry<KeyT>;
+using CodecT = EntryCodec<KeyT>;
 
 constexpr std::size_t EntryBytes = CodecT::encoded_entry_bytes;
 
 auto expect_entry_eq(const EntryT& actual, const EntryT& expected) -> void {
     EXPECT_EQ(actual.key, expected.key);
-    EXPECT_EQ(actual.version, expected.version);
+    EXPECT_EQ(actual.version(), expected.version());
     EXPECT_EQ(actual.payload_ref, expected.payload_ref);
-    EXPECT_EQ(actual.kind, expected.kind);
+    EXPECT_EQ(actual.kind(), expected.kind());
 }
 
 auto make_entries() -> std::array<EntryT, 3> {
+    auto tombstone = EntryT::tombstone(KeyT{0x22}, VersionT{6});
+    tombstone.payload_ref = PayloadRefT{0x5555666677778888ULL};
     return {
         EntryT::make(KeyT{0x11}, PayloadRefT{0x1111222233334444ULL}, VersionT{7}),
-        EntryT{
-            .key = KeyT{0x22},
-            .version = VersionT{6},
-            .payload_ref = PayloadRefT{0x5555666677778888ULL},
-            .kind = EntryKindT::tombstone,
-        },
+        tombstone,
         EntryT::make(KeyT{0x33}, PayloadRefT{0x9999AAAABBBBCCCCULL}, VersionT{5}),
     };
 }
@@ -70,12 +66,8 @@ TEST(EntryCodecTest, ValidEntryRoundTrips) {
  * @brief Verifies that a tombstone retains payload-reference bytes despite lacking value semantics.
  */
 TEST(EntryCodecTest, TombstoneEntryRoundTripsPayloadBytes) {
-    const EntryT original{
-        .key = KeyT{0x24},
-        .version = VersionT{84},
-        .payload_ref = PayloadRefT{0xA1A2A3A4A5A6A7A8ULL},
-        .kind = EntryKindT::tombstone,
-    };
+    auto original = EntryT::tombstone(KeyT{0x24}, VersionT{84});
+    original.payload_ref = PayloadRefT{0xA1A2A3A4A5A6A7A8ULL};
     std::array<std::byte, EntryBytes> encoded{};
 
     CodecT::encode(original, encoded);
@@ -163,7 +155,8 @@ TEST(EntryCodecTest, DecodeRejectsInvalidKind) {
     const auto entry = EntryT::make(KeyT{1}, PayloadRefT{2}, VersionT{3});
     std::array<std::byte, EntryBytes> encoded{};
     CodecT::encode(entry, encoded);
-    encoded.back() = std::byte{0xFF};
+    const std::uint64_t invalid_version_and_kind = (VersionT{3} << EntryT::KindBits) | 0xFFU;
+    std::memcpy(encoded.data() + sizeof(KeyT), &invalid_version_and_kind, sizeof(invalid_version_and_kind));
 
     EXPECT_THROW([[maybe_unused]] const auto decoded = CodecT::decode(encoded), std::invalid_argument);
 }
@@ -172,7 +165,7 @@ TEST(EntryCodecTest, DecodeRejectsInvalidKind) {
 TEST(EntryCodecTest, BatchStopsAtInvalidKindAndMayLeavePartialOutput) {
     auto entries = make_entries();
     const auto original_entries = entries;
-    entries[1].kind = static_cast<EntryKindT>(0xFF);
+    entries[1].version_and_kind = (entries[1].version() << EntryT::KindBits) | 0xFFU;
 
     std::array<std::byte, entries.size() * EntryBytes> encoded;
     encoded.fill(std::byte{0xA5});
@@ -185,7 +178,9 @@ TEST(EntryCodecTest, BatchStopsAtInvalidKindAndMayLeavePartialOutput) {
         [](std::byte value) { return value == std::byte{0xA5}; }));
 
     CodecT::encode_batch(original_entries, encoded);
-    encoded[2 * EntryBytes - 1] = std::byte{0xFF};
+    const std::uint64_t invalid_version_and_kind = (VersionT{6} << EntryT::KindBits) | 0xFFU;
+    std::memcpy(encoded.data() + EntryBytes + sizeof(KeyT), &invalid_version_and_kind,
+        sizeof(invalid_version_and_kind));
     const EntryT untouched = EntryT::make(KeyT{0xEE}, PayloadRefT{0xEEEE}, VersionT{0xEE});
     std::array<EntryT, original_entries.size()> decoded{untouched, untouched, untouched};
 
@@ -197,7 +192,7 @@ TEST(EntryCodecTest, BatchStopsAtInvalidKindAndMayLeavePartialOutput) {
 
 /** @brief Verifies that encoded width is the field-width sum rather than the padded struct width. */
 TEST(EntryCodecTest, EncodedLayoutExcludesStructPadding) {
-    constexpr auto field_bytes = sizeof(KeyT) + sizeof(VersionT) + sizeof(PayloadRefT) + sizeof(EntryKindT);
+    constexpr auto field_bytes = sizeof(KeyT) + sizeof(std::uint64_t) + sizeof(PayloadRefT);
 
     EXPECT_EQ(EntryBytes, field_bytes);
     EXPECT_LE(EntryBytes, sizeof(EntryT));
@@ -205,32 +200,24 @@ TEST(EntryCodecTest, EncodedLayoutExcludesStructPadding) {
 
 /** @brief Verifies the native field order without assuming a particular byte order. */
 TEST(EntryCodecTest, EncodedLayoutUsesNativeFieldOrder) {
-    const EntryT entry{
-        .key = KeyT{0x12},
-        .version = VersionT{0x1122334455667788ULL},
-        .payload_ref = PayloadRefT{0xA1A2A3A4A5A6A7A8ULL},
-        .kind = EntryKindT::tombstone,
-    };
+    auto entry = EntryT::tombstone(KeyT{0x12}, VersionT{0x0011223344556677ULL});
+    entry.payload_ref = PayloadRefT{0xA1A2A3A4A5A6A7A8ULL};
     std::array<std::byte, EntryBytes> encoded{};
     CodecT::encode(entry, encoded);
 
     KeyT key{};
-    VersionT version{};
+    std::uint64_t version_and_kind{};
     PayloadRefT payload_ref{};
-    EntryKindT kind{};
     std::size_t offset = 0;
     std::memcpy(&key, encoded.data() + offset, sizeof(key));
     offset += sizeof(key);
-    std::memcpy(&version, encoded.data() + offset, sizeof(version));
-    offset += sizeof(version);
+    std::memcpy(&version_and_kind, encoded.data() + offset, sizeof(version_and_kind));
+    offset += sizeof(version_and_kind);
     std::memcpy(&payload_ref, encoded.data() + offset, sizeof(payload_ref));
-    offset += sizeof(payload_ref);
-    std::memcpy(&kind, encoded.data() + offset, sizeof(kind));
 
     EXPECT_EQ(key, entry.key);
-    EXPECT_EQ(version, entry.version);
+    EXPECT_EQ(version_and_kind, entry.version_and_kind);
     EXPECT_EQ(payload_ref, entry.payload_ref);
-    EXPECT_EQ(kind, entry.kind);
 }
 
 /** @brief Verifies that single-entry and batch APIs share one physical entry width. */

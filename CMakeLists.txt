@@ -6,6 +6,9 @@ set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+set(ABSL_PROPAGATE_CXX_STD ON)
+set(ABSL_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+add_subdirectory(third-party/abseil-cpp)
 add_subdirectory(third-party/emds-toolkit)
 
 add_library(nano_lsm INTERFACE)
@@ -19,9 +22,21 @@ target_include_directories(
 )
 
 target_compile_features(nano_lsm INTERFACE cxx_std_23)
-target_link_libraries(nano_lsm INTERFACE emds-toolkit::emds-toolkit)
+target_link_libraries(nano_lsm INTERFACE absl::btree emds-toolkit::emds-toolkit)
 
-option(NANO_LSM_BUILD_TESTS "Build nano-lsm tests" ON)
+if(CMAKE_SOURCE_DIR STREQUAL PROJECT_SOURCE_DIR)
+    set(NANO_LSM_BUILD_TESTS_DEFAULT ON)
+else()
+    set(NANO_LSM_BUILD_TESTS_DEFAULT OFF)
+endif()
+
+option(
+    NANO_LSM_BUILD_TESTS
+    "Build nano-lsm tests"
+    ${NANO_LSM_BUILD_TESTS_DEFAULT}
+)
+
+unset(NANO_LSM_BUILD_TESTS_DEFAULT)
 
 if(NANO_LSM_BUILD_TESTS)
     if(NOT TARGET GTest::gtest_main)

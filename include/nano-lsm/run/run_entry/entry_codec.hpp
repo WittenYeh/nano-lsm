@@ -17,10 +17,10 @@
 #include <array>
 #include <bit>
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
 #include <limits>
 #include <span>
-#include <type_traits>
 #include <utility>
 
 #include <emds-toolkit/common/byte_view.hpp>
@@ -33,18 +33,15 @@ namespace nano_lsm {
 /**
  * @brief Encodes and decodes the padding-free native physical representation of RunEntry objects.
  *
- * The physical layout is KeyT, VersionT, PayloadRefT, then EntryKindT. It is bound to the current
+ * The physical layout is KeyT, packed version-and-kind, then PayloadRefT. It is bound to the current
  * architecture, ABI, and user schema and does not provide cross-endian portability.
  */
-template <PhysicalKey KeyT, typename PayloadRefT>
+template <PhysicalKey KeyT>
 class EntryCodec {
-    static_assert(std::is_trivially_copyable_v<PayloadRefT>, "PayloadRefT must be trivially copyable");
-    static_assert(sizeof(VersionT) == 8, "VersionT must have a 64-bit representation");
-
 public:
     /** @brief Number of bytes occupied by every encoded value entry or tombstone. */
     static constexpr std::size_t encoded_entry_bytes =
-        sizeof(KeyT) + sizeof(VersionT) + sizeof(PayloadRefT) + sizeof(EntryKindT);
+        sizeof(KeyT) + sizeof(std::uint64_t) + sizeof(PayloadRefT);
 
     /**
      * @brief Returns the exact output size required to encode num_entries.
@@ -63,10 +60,10 @@ public:
      *
      * @throws std::invalid_argument If the output size or entry kind is invalid.
      */
-    static auto encode(const RunEntry<KeyT, PayloadRefT>& entry, std::span<std::byte> output) -> void {
+    static auto encode(const RunEntry<KeyT>& entry, std::span<std::byte> output) -> void {
         emds::common::require_argument(output.size() == encoded_entry_bytes,
             "EntryCodec output size must equal encoded_entry_bytes");
-        emds::common::require_argument(is_valid_kind(entry.kind),
+        emds::common::require_argument(is_valid_kind(entry.kind()),
             "EntryCodec cannot encode an invalid entry kind");
 
         encode(entry, output.data());
@@ -81,14 +78,14 @@ public:
      * @throws std::invalid_argument If the batch size, output size, or an entry kind is invalid.
      */
     static auto encode_batch(
-        std::span<const RunEntry<KeyT, PayloadRefT>> entries, std::span<std::byte> output
+        std::span<const RunEntry<KeyT>> entries, std::span<std::byte> output
     ) -> void {
         const auto expected_bytes = encoded_batch_bytes(entries.size());
         emds::common::require_argument(output.size() == expected_bytes,
             "EntryCodec batch output size does not match entry count");
 
         for (std::size_t i = 0; i < entries.size(); ++i) {
-            emds::common::require_argument(is_valid_kind(entries[i].kind),
+            emds::common::require_argument(is_valid_kind(entries[i].kind()),
                 "EntryCodec cannot encode an invalid entry kind");
             encode(entries[i], output.data() + i * encoded_entry_bytes);
         }
@@ -99,12 +96,12 @@ public:
      *
      * @throws std::invalid_argument If the input size or encoded entry kind is invalid.
      */
-    [[nodiscard]] static auto decode(emds::common::ByteView input) -> RunEntry<KeyT, PayloadRefT> {
+    [[nodiscard]] static auto decode(emds::common::ByteView input) -> RunEntry<KeyT> {
         emds::common::require_argument(input.size() == encoded_entry_bytes,
             "EntryCodec input size must equal encoded_entry_bytes");
 
         auto entry = decode(input.data());
-        emds::common::require_argument(is_valid_kind(entry.kind),
+        emds::common::require_argument(is_valid_kind(entry.kind()),
             "EntryCodec cannot decode an invalid entry kind");
         return entry;
     }
@@ -120,7 +117,7 @@ public:
      * encoded entry kind is invalid.
      */
     static auto decode_batch(
-        emds::common::ByteView input, std::span<RunEntry<KeyT, PayloadRefT>> output
+        emds::common::ByteView input, std::span<RunEntry<KeyT>> output
     ) -> void {
         emds::common::require_argument(input.size() % encoded_entry_bytes == 0,
             "EntryCodec batch input size must be a multiple of encoded_entry_bytes");
@@ -131,7 +128,7 @@ public:
 
         for (std::size_t i = 0; i < num_entries; ++i) {
             auto entry = decode(input.data() + i * encoded_entry_bytes);
-            emds::common::require_argument(is_valid_kind(entry.kind),
+            emds::common::require_argument(is_valid_kind(entry.kind()),
                 "EntryCodec cannot decode an invalid entry kind");
             output[i] = std::move(entry);
         }
@@ -139,26 +136,22 @@ public:
 
 private:
     static constexpr std::size_t KeyOffset = 0;
-    static constexpr std::size_t VersionOffset = KeyOffset + sizeof(KeyT);
-    static constexpr std::size_t PayloadRefOffset = VersionOffset + sizeof(VersionT);
-    static constexpr std::size_t KindOffset = PayloadRefOffset + sizeof(PayloadRefT);
+    static constexpr std::size_t VersionAndKindOffset = KeyOffset + sizeof(KeyT);
+    static constexpr std::size_t PayloadRefOffset = VersionAndKindOffset + sizeof(std::uint64_t);
 
     /** @brief Encodes a previously validated entry at output. */
-    static auto encode(const RunEntry<KeyT, PayloadRefT>& entry, std::byte* output) noexcept -> void {
+    static auto encode(const RunEntry<KeyT>& entry, std::byte* output) noexcept -> void {
         encode_native(entry.key, output + KeyOffset);
-        encode_native(entry.version, output + VersionOffset);
+        encode_native(entry.version_and_kind, output + VersionAndKindOffset);
         encode_native(entry.payload_ref, output + PayloadRefOffset);
-        encode_native(entry.kind, output + KindOffset);
     }
 
     /** @brief Decodes an unvalidated physical entry. */
-    [[nodiscard]] static auto decode(const std::byte* input) -> RunEntry<KeyT, PayloadRefT> {
-        return RunEntry<KeyT, PayloadRefT>{
-            .key = decode_native<KeyT>(input + KeyOffset),
-            .version = decode_native<VersionT>(input + VersionOffset),
-            .payload_ref = decode_native<PayloadRefT>(input + PayloadRefOffset),
-            .kind = decode_native<EntryKindT>(input + KindOffset),
-        };
+    [[nodiscard]] static auto decode(const std::byte* input) -> RunEntry<KeyT> {
+        return RunEntry<KeyT>::from_physical(
+            decode_native<KeyT>(input + KeyOffset),
+            decode_native<std::uint64_t>(input + VersionAndKindOffset),
+            decode_native<PayloadRefT>(input + PayloadRefOffset));
     }
 
     /** @brief Reports whether kind is one of the two persisted EntryKindT values. */

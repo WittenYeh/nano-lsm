@@ -17,34 +17,30 @@
 #include <functional>
 
 #include <nano-lsm/options.hpp>
+#include <nano-lsm/run/mutable_run/mutable_run_backend.hpp>
+#include <nano-lsm/run/mutable_run/memory_backend.hpp>
+#include <nano-lsm/run/mutable_run/storage_backend.hpp>
 #include <nano-lsm/run/op_result.hpp>
-#include <nano-lsm/run/run_entry/comparator_concept.hpp>
 #include <nano-lsm/run/run_entry/entry_codec.hpp>
+#include <nano-lsm/run/run_entry/entry_comparator.hpp>
+#include <nano-lsm/run/run_entry/key_concept.hpp>
 #include <nano-lsm/run/run_entry/run_entry.hpp>
 
 namespace nano_lsm {
 
-/** @brief In-memory mutable-run storage policy, implemented in a later step. */
-class MemoryRunStorage;
-
-/** @brief File-backed mutable-run storage policy, implemented in a later step. */
-class FileRunStorage;
-
 /** @brief Read-only packed B+Tree run, implemented in later steps. */
 template <
     PhysicalKey KeyT,
-    typename PayloadRefT,
-    typename ComparatorT = std::less<KeyT>>
-requires KeyComparator<ComparatorT, KeyT>
+    typename KeyComparatorT = std::less<KeyT>>
+requires KeyComparator<KeyComparatorT, KeyT>
 class ImmutableRun;
 
-/** @brief Unordered L0 run, implemented in later steps. */
+/** @brief Batch-ingestible L0 run, implemented in later steps. */
 template <
     PhysicalKey KeyT,
-    typename PayloadRefT,
-    typename StoragePolicyT,
-    typename ComparatorT = std::less<KeyT>>
-requires KeyComparator<ComparatorT, KeyT>
+    typename PlacementT = Placement::MemoryResident,
+    typename KeyComparatorT = std::less<KeyT>>
+requires KeyComparator<KeyComparatorT, KeyT>
 class MutableRun;
 
 }  // namespace nano_lsm
